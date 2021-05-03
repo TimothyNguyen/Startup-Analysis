@@ -1,0 +1,72 @@
+---
+title: "Final Project"
+author: "Qiang Yang"
+date: "5/2/2021"
+output: html_document
+---
+
+## Data Cleaning
+
+```{r}
+library(tidyverse)
+df_com <- read.csv("./crunchbase-data/companies.csv")
+df_acq <- read.csv("./crunchbase-data/acquisitions.csv")
+drop <- c("permalink", "homepage_url", "city")
+
+acq <- df_acq%>%
+  select(name = company_name, price_amount)
+
+
+
+companies = df_com[, !(names(df_com) %in% drop)]
+companies$first_funding_year <- format(as.Date(companies$first_funding_at), "%Y")
+companies$last_funding_year <-
+  format(as.Date(companies$last_funding_at), "%Y")
+
+# Companies dataframe
+companies <- companies%>%
+  select(-c(first_funding_at, last_funding_at))%>%
+  separate(category_list, c("cat_a", "cat_b", "cat_c", "cat_d", "cat_e", "cat_f", "cat_g", "cat_h", "cat_i", "cat_j", "cat_k", "cat_l", "cat_m"), sep = "\\|", extra = "merge", fill = "right")%>%
+  pivot_longer(cols = starts_with("cat"),
+               names_to = "cate",
+               values_to = "category",
+               values_drop_na = TRUE)%>%
+  select(-c("cate"))
+ 
+
+df_companies_acq <- companies%>%
+  filter(status == "acquired")
+
+# Companies (acquired status) with price_amount
+companies_acq <- left_join(df_companies_acq, acq, by = c("name"))
+
+
+
+df_inv <- read.csv("./crunchbase-data/investments.csv")
+df_inv_fund <- df_inv%>%
+  select(name = company_name, investor_name, funding_round_type, funding_round_code, funded_at, raised_amount_usd)
+
+df_inv2<- df_inv_fund%>%
+  select(-c("funding_round_type", "funding_round_code"))%>%
+  separate("funded_at", c("funded_Year", "Month", "Day"), sep = "-")%>%
+  select(-c("Month", "Day"))%>%
+  group_by(name, investor_name, funded_Year)%>%
+  summarise(raised_amount_usd = sum(raised_amount_usd))
+
+
+# Investment
+investor <- left_join(df_inv2, companies, by = "name")
+  # separate(category_list, c("cat_a", "cat_b", "cat_c", "cat_d", "cat_e", "cat_f", "cat_g", "cat_h", "cat_i", "cat_j", "cat_k", "cat_l", "cat_m"), sep = "\\|", extra = "merge", fill = "right")%>%
+  # pivot_longer(cols = starts_with("cat"),
+  #              names_to = "cate",
+  #              values_to = "category",
+  #              values_drop_na = TRUE)%>%
+  # select(-c("cate"))
+```
+
+```{r}
+
+```
+
+```{}
+```
