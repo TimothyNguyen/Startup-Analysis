@@ -64,9 +64,20 @@ investor <- left_join(df_inv2, companies, by = "name")
   # select(-c("cate"))
 ```
 
-```{r}
+EDA:
 
+```{r}
+head(companies)
 ```
 
-```{}
+```{r}
+head(df_companies_acq)
+```
+
+```{r}
+head(investor)
+```
+
+```{r}
+
 ```
