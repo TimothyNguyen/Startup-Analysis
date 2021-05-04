@@ -17,6 +17,7 @@ library(countrycode)
 library(readr)
 library(tidyverse)
 library(highcharter) 
+library(shinyWidgets)
 ```
 
 ## Data Cleaning
@@ -123,19 +124,29 @@ investor
 ```
 
 ```{r}
+'
 hi <- investor %>%
   filter(funded_Year == 2007) 
   aggregate(as.numeric(hi$funding_total_usd), 
          by=list(category=hi$category), 
                 FUN=sum, na.rm=TRUE)
 hi
+'
+
+
+
+hi <- investor %>%
+  filter(funded_Year == 2007) %>%
+   group_by(investor_name) %>%
+   summarise(num_companies=n_distinct(name))
+hi
 ```
 
 ```{r}
 
-con_status <- factor(c('closed', 'operating', 'acquired', 'ipo'))
+con_status <- factor(c('operating', 'acquired', 'ipo'))
 ui <- fluidPage(
-  titlePanel('Categories & its Investors'),
+  titlePanel('Highest Funding Median per Industry'),
   
   sidebarLayout(
     sidebarPanel(
@@ -144,23 +155,25 @@ ui <- fluidPage(
                          choices = levels(con_status),
                          selected = levels(con_status)),
       sliderInput("year", "Year",
-                  min = 2007,
+                  min = 2010,
                   max = range(as.numeric(investor$funded_Year))[2],
-                  value = 2007,
+                  value = 2010,
                   sep = "",
                   step = 1,
                   animate = animationOptions(interval = 300)
       )
     ),
     mainPanel(
-      highchartOutput("investors")
+      highchartOutput("fund_median"),
     )
   )
 )
+
+#investor$
   
 server <- function(input, output) {
   
-  output$investors <- renderHighchart ({ 
+  output$fund_median <- renderHighchart ({ 
     data <- investor %>%
       filter(funded_Year %in% input$year) %>%
       filter(status  %in% input$status)
@@ -175,6 +188,155 @@ server <- function(input, output) {
   })
 }
 shinyApp(ui, server)
+```
+
+```{r}
+con_status <- factor(c('operating', 'acquired', 'ipo'))
+con_category <- factor(unique(investor[c("category")])$category)
+ui <- fluidPage(
+  titlePanel('Top Investors Based on Category'),
+  
+  sidebarLayout(
+    sidebarPanel(
+      checkboxGroupInput("status",
+                         "Choose status", 
+                         choices = levels(con_status),
+                         selected = levels(con_status)),
+                   
+       pickerInput(
+            "category",
+            "Choose category",
+            choices = unique(levels(con_category)),
+            options = list('action-box' = TRUE),
+            multiple=TRUE,
+            selected=con_category[0]
+        ),
+      sliderInput("year", "Year",
+                  min = 2010,
+                  max = range(as.numeric(investor$funded_Year))[2],
+                  value = 2010,
+                  sep = "",
+                  step = 1,
+                  animate = animationOptions(interval = 300)
+      )
+    ),
+    mainPanel(
+      highchartOutput("invest_category"),
+      highchartOutput("invest_category_money"),
+    )
+  )
+)
+  
+server <- function(input, output) {
+  
+  
+  output$invest_category <- renderHighchart ({ 
+    data <- investor %>%
+      filter(funded_Year %in% input$year) %>%
+      filter(status  %in% input$status) %>%
+      filter(category  %in% input$category) %>%
+      group_by(investor_name) %>%
+      summarise(num_companies=n_distinct(name))
+    data %>%
+      hchart(
+        "treemap", 
+        hcaes(x = investor_name, value = num_companies, color = num_companies)
+      )
+  })
+  
+  output$invest_category_money <- renderHighchart ({ 
+    data <- investor %>%
+      filter(funded_Year %in% input$year) %>%
+      filter(status  %in% input$status) %>%
+      filter(category  %in% input$category)
+    
+    data <- aggregate(as.numeric(data$funding_total_usd), 
+         by=list(category=data$category), FUN=median, na.rm=TRUE)
+    names(data)[2] <- "funding_median_usd" 
+    data %>%
+      hchart(
+        "treemap", 
+        hcaes(x = investor_name, funding_median_usd, color = funding_median_usd)
+      )
+  })
+}
+shinyApp(ui, server)
+```
+
+```{'}
+{r, warning=FALSE, echo=FALSE}
+con <- factor(unique(levels_df[c("title")])$title)
+con2 <- factor(unique(levels_df[c("state")])$state)
+ui <-
+  fluidPage(
+    # App title
+    titlePanel("Common Investors based on category"),
+    
+    # sidebar layout with input and output definitions
+    sidebarLayout(
+      # Sidebar panel for inputs
+      sidebarPanel(
+        sliderInput("yoe",
+                    "Years of experience",
+                    min = min(levels_df$yearsofexperience),
+                    max = 30,
+                    value = c(min(levels_df$yearsofexperience), 
+                              30),
+                    step = 1,
+                    sep = ""),
+         pickerInput(
+            "statePicker",
+            "Select/deselect all + format selected",
+            choices = unique(levels(con2)),
+            options = list("action-box" = TRUE),
+            multiple=TRUE,
+            selected="WA"
+        ),
+      ),
+     
+      
+      # Main panel for displaying outputs
+      mainPanel(
+        plotOutput(outputId = "tc")
+      )
+    ))
+server <- function(input, output) {
+  output$tc <-
+    renderPlot({
+      
+      prep <- levels_df %>% 
+        filter(yearsofexperience >= input$yoe[1] & 
+              yearsofexperience <= input$yoe[2])
+    
+      location_df <- prep %>% 
+        distinct(state, .keep_all = TRUE) %>%
+        select(state, zip, lat, long) %>% na.omit()
+      tc <- prep
+      if(length(input$statePicker) != 0) {
+        tc <- tc %>%  
+          filter(state %in% input$statePicker) 
+      } 
+      tc <- aggregate(list(tc = tc$totalyearlycompensation,
+                           basesalary = tc$basesalary,
+                           stockgrantvalue = tc$stockgrantvalue,
+                           bonus = tc$bonus), 
+                          by=list(title=tc$title), 
+                          FUN=mean, na.action = na.omit)
+      tc %>%
+        mutate(title = fct_reorder(title, tc))%>%
+        ggplot(aes(x = title, y = tc, fill = title)) + 
+        geom_text(aes(y = tc, label = paste0("$", round(tc, 2)), hjust=0), size = 3) +
+        geom_bar(stat = "identity")+
+        coord_flip()+
+        labs(x = "Roles", y = "Compensation (US Dollars)")+
+        ggtitle(paste("Factoring YOE + Location: Pay for roles"))+
+        theme(legend.title = element_blank(), legend.position = "none")
+        
+    })  
+      
+}
+shinyApp(ui, server)
+'
 ```
 
 -   Investor side:
