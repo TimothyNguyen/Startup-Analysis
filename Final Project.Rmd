@@ -5,10 +5,23 @@ date: "5/2/2021"
 output: html_document
 ---
 
+## Imports
+
+```{r}
+library(ggplot2) 
+library(shiny)
+library(plotly)
+library(tidyr)
+library(dplyr)
+library(countrycode)
+library(readr)
+library(tidyverse)
+library(highcharter) 
+```
+
 ## Data Cleaning
 
 ```{r}
-library(tidyverse)
 df_com <- read.csv("./crunchbase-data/companies.csv")
 df_acq <- read.csv("./crunchbase-data/acquisitions.csv")
 drop <- c("permalink", "homepage_url", "city")
@@ -23,7 +36,30 @@ companies$first_funding_year <- format(as.Date(companies$first_funding_at), "%Y"
 companies$last_funding_year <-
   format(as.Date(companies$last_funding_at), "%Y")
 
+companies <- companies%>%
+  select(-c(first_funding_at, last_funding_at))%>%
+  separate(category_list, c("cat_a", "cat_b", "cat_c", "cat_d", "cat_e", "cat_f", "cat_g", "cat_h", "cat_i", "cat_j", "cat_k", "cat_l", "cat_m"), sep = "\\|", extra = "merge", fill = "right")%>%
+  pivot_longer(cols = starts_with("cat_a"),
+               names_to = "cate",
+               values_to = "category",
+               values_drop_na = TRUE)%>%
+  select(-c("cate"))
+companies<- companies %>% select(-contains("cat_"))
+
+'
+hi <- companies%>%
+  select(-c(first_funding_at, last_funding_at))%>%
+  separate(category_list, c("cat_a", "cat_b", "cat_c", "cat_d", "cat_e", "cat_f", "cat_g", "cat_h", "cat_i", "cat_j", "cat_k", "cat_l", "cat_m"), sep = "\\|", extra = "merge", fill = "right")%>%
+  pivot_longer(cols = starts_with("cat_a"),
+               names_to = "cate",
+               values_to = "category",
+               values_drop_na = TRUE)%>%
+  select(-c("cate"))
+hi <- hi %>% select(-contains("cat_"))
+hi
+'
 # Companies dataframe
+'
 companies <- companies%>%
   select(-c(first_funding_at, last_funding_at))%>%
   separate(category_list, c("cat_a", "cat_b", "cat_c", "cat_d", "cat_e", "cat_f", "cat_g", "cat_h", "cat_i", "cat_j", "cat_k", "cat_l", "cat_m"), sep = "\\|", extra = "merge", fill = "right")%>%
@@ -32,7 +68,8 @@ companies <- companies%>%
                values_to = "category",
                values_drop_na = TRUE)%>%
   select(-c("cate"))
- 
+'
+#companies
 
 df_companies_acq <- companies%>%
   filter(status == "acquired")
@@ -67,17 +104,107 @@ investor <- left_join(df_inv2, companies, by = "name")
 EDA:
 
 ```{r}
-head(companies)
+companies
 ```
 
 ```{r}
-head(df_companies_acq)
+companies_acq
 ```
 
 ```{r}
-head(investor)
+investor
+```
+
+## Investors (Treemap)
+
+```{r}
+#investor %>%
+#  filter(category == "Billing")
+```
+
+```{r}
+hi <- investor %>%
+  filter(funded_Year == 2007) 
+  aggregate(as.numeric(hi$funding_total_usd), 
+         by=list(category=hi$category), 
+                FUN=sum, na.rm=TRUE)
+hi
 ```
 
 ```{r}
 
+con_status <- factor(c('closed', 'operating', 'acquired', 'ipo'))
+ui <- fluidPage(
+  titlePanel('Categories & its Investors'),
+  
+  sidebarLayout(
+    sidebarPanel(
+      checkboxGroupInput("status",
+                         "Choose status", 
+                         choices = levels(con_status),
+                         selected = levels(con_status)),
+      sliderInput("year", "Year",
+                  min = 2007,
+                  max = range(as.numeric(investor$funded_Year))[2],
+                  value = 2007,
+                  sep = "",
+                  step = 1,
+                  animate = animationOptions(interval = 300)
+      )
+    ),
+    mainPanel(
+      highchartOutput("investors")
+    )
+  )
+)
+  
+server <- function(input, output) {
+  
+  output$investors <- renderHighchart ({ 
+    data <- investor %>%
+      filter(funded_Year %in% input$year) %>%
+      filter(status  %in% input$status)
+    data <- aggregate(as.numeric(data$funding_total_usd), 
+         by=list(category=data$category), FUN=median, na.rm=TRUE)
+    names(data)[2] <- "funding_median_usd" 
+    data %>%
+      hchart(
+        "treemap", 
+        hcaes(x = category, value = funding_median_usd, color = funding_median_usd)
+      )
+  })
+}
+shinyApp(ui, server)
 ```
+
+-   Investor side:
+
+    -   Status (left_join company_name), company_catogories, investor_name, raised_amount_usd, (funded_at)
+
+    -   funding_round_type, funding_round_code
+
+    -   Treemap
+
+        -   X axis: Category
+
+        -   Y axis: \# investors (median) or funding median
+
+        -   Label: Funding Total, Funding Median, \# of companies
+
+        -   Scroller: Year
+
+        -   Selector: Funding Round, Status
+
+    -   Interactive Barplot (Flipped) - Top 15 or 20
+
+        -   Selector (Filter)
+
+            -   Year
+
+            -   Location
+
+            -   Category
+
+        -   X axis: Investors
+
+        -   Y axis: funding total (Label: \# of companies funded by each investors)
