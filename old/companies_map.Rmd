@@ -148,7 +148,7 @@ us_companies %>%
 
 ```
 
-``` {.{'}}
+``` {.{.{.{'}}}}
 {r, echo=FALSE, out.width="100%"}
 
 con_status <- factor(c('operating', 'acquired', 'ipo'))

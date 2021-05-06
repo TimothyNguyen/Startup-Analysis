@@ -1,0 +1,401 @@
+---
+title: "What external factors are there in building a more successful startup?"
+author: "Timothy Nguyen & Jacob Yang"
+date: "5/6/2021"
+runtime: shiny
+output: 
+  ioslides_presentation: 
+    css: temp.css
+---
+
+## Why is it important?
+
+-   Startups are full of promise and excitement, but the flip side is, they're also full of risk and uncertainty. There are a lot of great ideas out there that somehow never get off the ground, and, conversely, there are plenty of questionable ones that become massive successes.
+
+-   In addition to a good idea, there are many factors that influence a startup's success, and understanding and leveraging these factors will help a startup get further along the road to success.
+
+-   In this project, we will focus on some external factors that may affect a startup's developement:
+
+    -   Category of industries, locations, investors
+
+## Why is it important?
+
+-   If you're looking to build a startup, understanding where to begin your startup may be important based off the industry you're in.
+-   Successful can mean many things. It can mean being operated and become a series C or higher startup. Maybe you want to build a company that IPO or accquired. Are there specific industries or locations where you can find your success?
+-   What investors could be important to your business?
+
+## Notes:
+
+-   We've filtered our data to look at USA locations
+-   We're only looking at data from companies who have had their last funding round between 2013 and 2015.
+-   Reason: Investor patterns change quite rapidly and what made a company successful five years ago doesn't neccesarily mean much for your success now (if we were living in 2015/2016)
+
+## Datasets (Companies Side)
+
+-   company name, funding_total_usd, status, country_code, state_code, city, funding_rounds, last_funding_year
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+library(ggplot2) 
+library(shiny)
+library(plotly)
+library(tidyr)
+library(dplyr)
+library(countrycode)
+library(readr)
+library(tidyverse)
+library(highcharter) 
+library(shinyWidgets)
+# install.packages("knitr")
+library(knitr)
+Sys.setenv("MAPBOX_TOKEN" = "pk.eyJ1IjoidGltb3RoeW5ndXllIiwiYSI6ImNrbW8wZmR0OTF6cnoycHQ0ZXFydTBwY3oifQ.LumCjldRn9X9jX70p1BA-w")
+#remove.packages("knitr")
+#packageurl <- "https://cran.r-project.org/src/contrib/Archive/knitr/knitr_1.27.tar.gz"
+#install.packages(packageurl, repos=NULL, type="source")
+```
+
+![](img/companyside.png)
+
+## Datasets (Investors side)
+
+-   investor_name, state_code, category (industry), funded_Year, raised_amount_usd
+
+![](img/investorside.png)
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+library(ggplot2) 
+library(shiny)
+library(plotly)
+library(tidyr)
+library(dplyr)
+library(countrycode)
+library(readr)
+library(tidyverse)
+library(highcharter) 
+library(shinyWidgets)
+# install.packages("knitr")
+library(knitr)
+Sys.setenv("MAPBOX_TOKEN" = "pk.eyJ1IjoidGltb3RoeW5ndXllIiwiYSI6ImNrbW8wZmR0OTF6cnoycHQ0ZXFydTBwY3oifQ.LumCjldRn9X9jX70p1BA-w")
+
+df_com <- read.csv("./crunchbase-data/companies.csv")
+df_acq <- read.csv("./crunchbase-data/acquisitions.csv")
+drop <- c("permalink", "homepage_url")
+acq <- df_acq%>%
+  select(name = company_name, price_amount)
+companies <- df_com[, !(names(df_com) %in% drop)]
+companies$first_funding_year <- format(as.Date(companies$first_funding_at), "%Y")
+companies$last_funding_year <-
+  format(as.Date(companies$last_funding_at), "%Y") 
+companies <- companies%>%
+  select(-c(first_funding_at, last_funding_at))%>%
+  separate(category_list, c("cat_a", "cat_b", "cat_c", "cat_d", "cat_e", "cat_f", "cat_g", "cat_h", "cat_i", "cat_j", "cat_k", "cat_l", "cat_m"), sep = "\\|", extra = "merge", fill = "right")%>%
+  pivot_longer(cols = starts_with("cat_a"),
+               names_to = "cate",
+               values_to = "category",
+               values_drop_na = TRUE)%>%
+  select(-c("cate"))
+companies<- companies %>% select(-contains("cat_"))
+#companies
+df_companies_acq <- companies%>%
+  filter(status == "acquired")
+# Companies (acquired status) with price_amount
+companies_acq <- left_join(df_companies_acq, acq, by = c("name"))
+df_inv <- read.csv("./crunchbase-data/investments.csv")
+df_inv_fund <- df_inv%>%
+  select(name = company_name, investor_name, funding_round_type, funding_round_code, funded_at, raised_amount_usd)
+df_inv2<- df_inv_fund%>%
+  select(-c("funding_round_type", "funding_round_code"))%>%
+  separate("funded_at", c("funded_Year", "Month", "Day"), sep = "-")%>%
+  select(-c("Month", "Day"))%>%
+  group_by(name, investor_name, funded_Year)%>%
+  summarise(raised_amount_usd = sum(raised_amount_usd))
+# Investment
+investor <- left_join(df_inv2, companies, by = "name")
+# Clean location data
+df_us <- read.csv("./us-code-lat-long.csv")
+df_us$location <- paste(df_us$fields.city, df_us$fields.state, sep=", ")
+df_us <- df_us %>% select(location, fields.zip, fields.latitude, fields.longitude )
+df_us <- df_us %>% distinct(location, .keep_all = TRUE) 
+names(df_us)[names(df_us) == "fields.zip"] <- "zip"
+names(df_us)[names(df_us) == "fields.latitude"] <- "lat"
+names(df_us)[names(df_us) == "fields.longitude"] <- "long"
+# Group the two datasets together
+us_companies <- companies %>% 
+  filter(as.numeric(last_funding_year) >= 2013) %>%
+  filter(country_code == 'USA') %>%
+  filter(funding_total_usd != '-') %>%
+  filter(funding_total_usd != '') %>%
+  filter(category != '') %>%
+  filter(status != '') %>%
+  filter(city != '') %>%
+  filter(state_code != '')
+us_companies$location = paste(us_companies$city, ", ", us_companies$state_code,
+                              sep = "")
+us_companies <- left_join(
+  us_companies,
+  df_us,
+  by=c("location"))
+```
+
+## Startups locations - Companies.R
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+df_com <- read.csv("./crunchbase-data/companies.csv")
+df_acq <- read.csv("./crunchbase-data/acquisitions.csv")
+drop <- c("permalink", "homepage_url")
+acq <- df_acq%>%
+  select(name = company_name, price_amount)
+companies <- df_com[, !(names(df_com) %in% drop)]
+companies$first_funding_year <- format(as.Date(companies$first_funding_at), "%Y")
+companies$last_funding_year <-
+  format(as.Date(companies$last_funding_at), "%Y") 
+companies <- companies%>%
+  select(-c(first_funding_at, last_funding_at))%>%
+  separate(category_list, c("cat_a", "cat_b", "cat_c", "cat_d", "cat_e", "cat_f", "cat_g", "cat_h", "cat_i", "cat_j", "cat_k", "cat_l", "cat_m"), sep = "\\|", extra = "merge", fill = "right")%>%
+  pivot_longer(cols = starts_with("cat_a"),
+               names_to = "cate",
+               values_to = "category",
+               values_drop_na = TRUE)%>%
+  select(-c("cate"))
+companies<- companies %>% select(-contains("cat_"))
+#companies
+df_companies_acq <- companies%>%
+  filter(status == "acquired")
+# Companies (acquired status) with price_amount
+companies_acq <- left_join(df_companies_acq, acq, by = c("name"))
+df_inv <- read.csv("./crunchbase-data/investments.csv")
+df_inv_fund <- df_inv%>%
+  select(name = company_name, investor_name, funding_round_type, funding_round_code, funded_at, raised_amount_usd)
+df_inv2<- df_inv_fund%>%
+  select(-c("funding_round_type", "funding_round_code"))%>%
+  separate("funded_at", c("funded_Year", "Month", "Day"), sep = "-")%>%
+  select(-c("Month", "Day"))%>%
+  group_by(name, investor_name, funded_Year)%>%
+  summarise(raised_amount_usd = sum(raised_amount_usd))
+# Investment
+investor <- left_join(df_inv2, companies, by = "name")
+# Clean location data
+df_us <- read.csv("./us-code-lat-long.csv")
+df_us$location <- paste(df_us$fields.city, df_us$fields.state, sep=", ")
+df_us <- df_us %>% select(location, fields.zip, fields.latitude, fields.longitude )
+df_us <- df_us %>% distinct(location, .keep_all = TRUE) 
+names(df_us)[names(df_us) == "fields.zip"] <- "zip"
+names(df_us)[names(df_us) == "fields.latitude"] <- "lat"
+names(df_us)[names(df_us) == "fields.longitude"] <- "long"
+# Group the two datasets together
+us_companies <- companies %>% 
+  filter(as.numeric(last_funding_year) >= 2013) %>%
+  filter(country_code == 'USA') %>%
+  filter(funding_total_usd != '-') %>%
+  filter(funding_total_usd != '') %>%
+  filter(category != '') %>%
+  filter(status != '') %>%
+  filter(city != '') %>%
+  filter(state_code != '')
+us_companies$location = paste(us_companies$city, ", ", us_companies$state_code,
+                              sep = "")
+us_companies <- left_join(
+          us_companies,
+          df_us,
+          by=c("location"))
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+con_status <- factor(c('acquired', 'ipo', 'operating'))
+ui <-
+  fluidPage(
+    # App title
+    titlePanel("Companies"),
+    
+    # sidebar layout with input and output definitions
+    sidebarLayout(
+      # Sidebar panel for inputs
+      sidebarPanel(
+        radioButtons("status",
+                     "Choose status", 
+                     choices = con_status),
+        sliderInput("round", "Rounds",
+                  min = 0,
+                  max = range(as.numeric(us_companies$funding_rounds))[2],
+                  value = c(3,19),
+                  animate = animationOptions(interval = 300))
+      ),
+      
+      
+      
+      # Main panel for displaying outputs
+      mainPanel(
+        plotlyOutput(outputId = "companies")
+      )
+    ))
+server <- function(input, output) {
+  output$companies <-
+    renderPlotly({
+      prep <- us_companies %>% 
+        filter(status %in% input$status) %>%
+        filter(funding_rounds >= input$round[1]) %>%
+        filter(funding_rounds <= input$round[2])
+      
+      prep <- prep %>%
+        group_by(location, category, status, lat, long, state_code) %>%
+        select(funding_total_usd, funding_rounds) %>% 
+        summarise(x = median(as.numeric(funding_total_usd)), 
+                  mean_funding_rounds = mean(as.numeric(funding_rounds)),
+                  n = n())
+      "
+      for(i in 1:nrow(prep)) {
+        prep[i,'lat'] <- prep[i,'lat'] + runif(1, -0.15, 0.15)
+        prep[i,'long'] <- prep[i,'long'] + runif(1, -0.15, 0.15)
+      }
+      "
+      
+      
+      fig <- prep
+      fig %>%
+        plot_mapbox() %>%
+        add_markers(x = ~long,
+                    y = ~lat,
+                    color = ~category,
+                    size = ~x * n,
+                   text = ~paste0(location, "<br>",
+                   "<b>Median salary:</b> $", round(x, 2), "<br>",
+                   "<b>Number of companies:</b> ", round(n, 2), "<br>",
+                   "<b>Category:</b> ", category, "<br>",
+                   "<b>Average Funding Rounds:</b> ", mean_funding_rounds, "<br>")) %>%
+        layout(
+          legend = list(orientation = "h", x = 0.5),
+          mapbox = list(
+            style = 'dark',
+            center = list(lon = -97, lat = 38),
+            zoom = 2.5)) 
+          })
+}
+shinyApp(ui, server)
+```
+
+```{r, warning=FALSE, echo=FALSE}
+source("Companies.R", local = knitr::knit_global())
+```
+
+## Investor Interactive plots - Investors.R
+
+```{r, warning=FALSE, echo=FALSE}
+investor <- investor%>%
+  ungroup()%>%
+  filter(country_code == "USA")%>%
+  select(investor_name, state_code, category, funded_Year, raised_amount_usd)
+
+investor$category <- as.factor(investor$category)
+investor$investor_name <- as.factor(investor$investor_name)
+
+
+ui <- fluidPage(
+  titlePanel('Highest Funding total per Industry'),
+   sidebarLayout(
+      # Sidebar panel for inputs
+      sidebarPanel(
+        sliderInput("year", "Year",
+                  min = 2013,
+                  max = range(as.numeric(investor$funded_Year))[2],
+                  value = 2013,
+                  sep = "",
+                  step = 1,
+                  animate = animationOptions(interval = 1000)),
+        pickerInput(
+                  inputId = "state",
+                  label = "Select a state",
+                  choices = unique(investor$state_code),
+                  options = list(`actions-box` = TRUE),
+                  selected = "CA",
+                  multiple = TRUE)
+      ),
+      
+      
+      
+      # Main panel for displaying outputs
+      mainPanel(
+          plotlyOutput("bars"),
+          highchartOutput("treemap")
+      ))
+  
+
+)
+
+
+server <- function(input, output, session) {
+  
+  output$bars <- renderPlotly({
+    inv <- investor%>%
+      filter(funded_Year %in% input$year)%>%
+      filter(state_code %in% input$state)
+    inv <- aggregate(as.numeric(inv$raised_amount_usd), by = list(category = inv$category),
+                    FUN = sum, na.rm = TRUE)
+    names(inv)[2] <- "raised_total"
+
+    hi <- inv[order(inv$raised_total, decreasing = TRUE), ]
+
+    hi<- hi %>%
+      mutate(category = fct_reorder(category, raised_total))
+    
+    hi <- head(hi, 20)
+    hi%>%
+    plot_ly(source = "bar_plot",
+            hoverlabel  = list(bgcolor = "yellow",
+                               font = list(color = "red")),
+            type = "bar")%>%
+      add_bars(y = ~category, x = ~raised_total, color = ~category, showlegend = FALSE, hoverinfo = "x+y")%>%
+      layout(title = list(text = "Top 20 industry with highest Funding total"))
+
+    })
+  
+  output$treemap <- renderHighchart({
+    clickbar <- event_data("plotly_click", source = "bar_plot")
+    if (is.null(clickbar)) { return(NULL) }
+    inv <- investor%>%
+      filter(funded_Year %in% input$year)%>%
+      filter(state_code %in% input$state)%>%
+      filter(category == clickbar$y)
+    inv <- aggregate(as.numeric(inv$raised_amount_usd), by = list(investor_name = inv$investor_name),
+                    FUN = sum, na.rm = TRUE)
+    names(inv)[2] <- "raised_total"
+
+    hi <- inv[order(inv$raised_total, decreasing = TRUE), ]
+
+    hi<- hi %>%
+      mutate(category = fct_reorder(investor_name, raised_total))
+    
+    hi <- head(hi, 20)
+    hi%>%
+      hchart(
+        "treemap",
+        hcaes(x = investor_name, value = raised_total, color = raised_total))%>%
+      hc_title(text = paste0("Top 20 investors of ", clickbar$y, " funding (in $)"))%>%
+      hc_colorAxis(stops = color_stops(colors = viridis::inferno(10)))  
+    
+  })
+
+}
+
+shinyApp(ui, server)
+
+
+```
+
+## Conclusions
+
+-   Most startups especially those that are acquired/ipo happen in the east and west coast
+
+-   Within the past 2-3 years, those who have gone to ipo/acquired were primarily those in the software/internet sector or biotech area
+
+-   For different industries, the main investors are different:
+
+    -   Biotechnology: Domain Associates, OrbiMed Advisors
+
+    -   Hotels: Baillie Gifford, China Broadband Capital, FIdelity Investments
+
+    -   Enterprise Software: Andreessen Horowitz, Insight Venture Partners
+
+    -   Analytics: RRE Ventures, DFJ Growth, Jefferies & Company
+
+## Resource
+
+-   <https://github.com/notpeter/crunchbase-data>

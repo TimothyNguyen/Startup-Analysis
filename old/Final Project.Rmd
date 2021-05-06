@@ -25,264 +25,104 @@ library(shinyWidgets)
 ```{r}
 df_com <- read.csv("./crunchbase-data/companies.csv")
 df_acq <- read.csv("./crunchbase-data/acquisitions.csv")
-drop <- c("permalink", "homepage_url")
+drop <- c("permalink", "homepage_url", "city")
+
 acq <- df_acq%>%
   select(name = company_name, price_amount)
-companies <- df_com[, !(names(df_com) %in% drop)]
+
+
+
+companies = df_com[, !(names(df_com) %in% drop)]
 companies$first_funding_year <- format(as.Date(companies$first_funding_at), "%Y")
 companies$last_funding_year <-
-  format(as.Date(companies$last_funding_at), "%Y") 
+  format(as.Date(companies$last_funding_at), "%Y")
+
 companies <- companies%>%
   select(-c(first_funding_at, last_funding_at))%>%
-  separate(category_list, c("cat_a"), sep = "\\|", extra = "drop")%>%
+  separate(category_list, c("cat_a", "cat_b", "cat_c", "cat_d", "cat_e", "cat_f", "cat_g", "cat_h", "cat_i", "cat_j", "cat_k", "cat_l", "cat_m"), sep = "\\|", extra = "merge", fill = "right")%>%
+  pivot_longer(cols = starts_with("cat_a"),
+               names_to = "cate",
+               values_to = "category",
+               values_drop_na = TRUE)%>%
+  select(-c("cate"))
+companies<- companies %>% select(-contains("cat_"))
+
+'
+hi <- companies%>%
+  select(-c(first_funding_at, last_funding_at))%>%
+  separate(category_list, c("cat_a", "cat_b", "cat_c", "cat_d", "cat_e", "cat_f", "cat_g", "cat_h", "cat_i", "cat_j", "cat_k", "cat_l", "cat_m"), sep = "\\|", extra = "merge", fill = "right")%>%
+  pivot_longer(cols = starts_with("cat_a"),
+               names_to = "cate",
+               values_to = "category",
+               values_drop_na = TRUE)%>%
+  select(-c("cate"))
+hi <- hi %>% select(-contains("cat_"))
+hi
+'
+# Companies dataframe
+'
+companies <- companies%>%
+  select(-c(first_funding_at, last_funding_at))%>%
+  separate(category_list, c("cat_a", "cat_b", "cat_c", "cat_d", "cat_e", "cat_f", "cat_g", "cat_h", "cat_i", "cat_j", "cat_k", "cat_l", "cat_m"), sep = "\\|", extra = "merge", fill = "right")%>%
   pivot_longer(cols = starts_with("cat"),
                names_to = "cate",
                values_to = "category",
                values_drop_na = TRUE)%>%
-  select(-c("cate"))%>%
-  filter(country_code == "USA")%>%
-  ungroup()
-
-
-
+  select(-c("cate"))
+'
 #companies
+
 df_companies_acq <- companies%>%
   filter(status == "acquired")
+
 # Companies (acquired status) with price_amount
 companies_acq <- left_join(df_companies_acq, acq, by = c("name"))
+
+
+
 df_inv <- read.csv("./crunchbase-data/investments.csv")
 df_inv_fund <- df_inv%>%
   select(name = company_name, investor_name, funding_round_type, funding_round_code, funded_at, raised_amount_usd)
+
 df_inv2<- df_inv_fund%>%
   select(-c("funding_round_type", "funding_round_code"))%>%
   separate("funded_at", c("funded_Year", "Month", "Day"), sep = "-")%>%
   select(-c("Month", "Day"))%>%
   group_by(name, investor_name, funded_Year)%>%
   summarise(raised_amount_usd = sum(raised_amount_usd))
+
+
 # Investment
 investor <- left_join(df_inv2, companies, by = "name")
+  # separate(category_list, c("cat_a", "cat_b", "cat_c", "cat_d", "cat_e", "cat_f", "cat_g", "cat_h", "cat_i", "cat_j", "cat_k", "cat_l", "cat_m"), sep = "\\|", extra = "merge", fill = "right")%>%
+  # pivot_longer(cols = starts_with("cat"),
+  #              names_to = "cate",
+  #              values_to = "category",
+  #              values_drop_na = TRUE)%>%
+  # select(-c("cate"))
+```
 
+EDA:
+
+```{r}
+companies
+```
+
+```{r}
+companies_acq
 ```
 
 ```{r}
 investor
 ```
 
-## Companies Treemap
-
 ```{r}
-companies$category <- as.factor(companies$category)
-companies$last_funding_year <- as.numeric(companies$last_funding_year)
-ui <- fluidPage(
-  titlePanel("Companies Treemap"),
+investor <- investor %>%
+  filter(as.numeric(last_funding_year) >= 2013)
 
-  sidebarLayout(
-    sidebarPanel(
-
-
-
-      sliderInput("year", "funding year",
-                  min = 2013,
-                  max = 2015,
-                  value = 2013,
-                  sep = "",
-                  step = 1,
-                  animate = animationOptions(interval = 1000)
-      )
-    ),
-    mainPanel(
-      highchartOutput("treemap")
-    )
-)
-)
-
-server <- function(input, output) {
-
-  output$treemap <- renderHighchart ({
-    co <- companies%>%
-      filter(last_funding_year == input$year)
-    co <- aggregate(as.numeric(co$funding_total_usd), by = list(category = co$category),
-                    FUN = median, na.rm = TRUE)
-    names(co)[2] <- "funding_median_usd"
-
-    hi <- co[order(co$funding_median_usd, decreasing = TRUE), ]
-
-
-    hi %>%
-      mutate(category = fct_reorder(category, funding_median_usd))
-    
-    hi <- head(hi, 20)
-    hi%>%
-      hchart(
-        "treemap",
-        hcaes(x = category, value = funding_median_usd, color = funding_median_usd))%>%
-      hc_colorAxis(stops = color_stops(colors = viridis::inferno(10)))
-
-
-  })
-
-
-}
-
-shinyApp(ui, server)
-
-```
-
-## Investors Barplots
-
-```{r}
-con_status <- factor(c('operating', 'acquired', 'ipo'))
-investor$investor_name<- as.factor(investor$investor_name)
-investor <- investor%>%
-  ungroup()%>%
-  filter(country_code == "USA")%>%
-  select(investor_name, category, funded_Year, raised_amount_usd)
-
-investor$category <- as.factor(investor$category)
-
-ui <- fluidPage(
-  titlePanel('Highest Funding Median per Industry'),
-  sliderInput("year", "Year",
-                  min = 2013,
-                  max = range(as.numeric(investor$funded_Year))[2],
-                  value = 2013,
-                  sep = "",
-                  step = 1,
-                  animate = animationOptions(interval = 300)),
-  selectizeInput(
-    inputId = "category",
-    label = "Select a category",
-    choices = unique(investor$category),
-    selected = '',
-    multiple = TRUE
-  ),
-  plotlyOutput("bars")
-)
-
-
-server <- function(input, output, session) {
-  
-  output$bars <- renderPlotly({
-      data <- investor %>%
-      filter(funded_Year %in% input$year)%>%
-      filter(category %in% input$category)
-      data_2 <- data %>%
-          mutate(investor_name = fct_reorder(investor_name, funding_median_usd))
-      ggplot(data_2[1:20,], aes(x = investor_name, y = funding_median_usd, fill = investor_name)) + 
-          geom_text(aes(y = funding_median_usd, 
-                        label = paste0("$", funding_median_usd), hjust=0), size = 3) +
-          geom_bar(stat = "identity")+
-          coord_flip()+
-          labs(x = "Roles", y = "Compensation (US Dollars)")+
-          ggtitle(paste("Factoring YOE + Location: Pay for roles"))+
-          theme(legend.title = element_blank(), legend.position = "none")  })
-  
-
-}
-
-shinyApp(ui, server)
-
-```
-
-EDA: \#\# Interactive plots
-
-```{r}
-investor <- investor%>%
-  ungroup()%>%
-  filter(country_code == "USA")%>%
-  select(investor_name, category, funded_Year, raised_amount_usd)
-
-investor$category <- as.factor(investor$category)
-investor$investor_name <- as.factor(investor$investor_name)
-
-
-inv_1 <- investor%>%
-      filter(funded_Year == 2013)
-inv_1 <- aggregate(as.numeric(inv_1$raised_amount_usd), by = list(category = inv_1$category),
-                    FUN = sum, na.rm = TRUE)
-names(inv_1)[2] <- "raised_total"
-hi_1 <- inv_1[order(inv_1$raised_total, decreasing = TRUE), ]
-hi_1 %>%
-    mutate(category = fct_reorder(category, raised_total))
-hi_1 <- head(hi_1, 30)
-
-ui <- fluidPage(
-  titlePanel('Highest Funding Median per Industry'),
-  sliderInput("year", "Year",
-                  min = 2013,
-                  max = range(as.numeric(investor$funded_Year))[2],
-                  value = 2013,
-                  sep = "",
-                  step = 1,
-                  animate = animationOptions(interval = 300)),
-  selectizeInput(
-    inputId = "category",
-    label = "Select a category",
-    choices = unique(hi_1$category),
-    selected = '',
-    multiple = FALSE
-  ),
-  plotlyOutput("bars"),
-  highchartOutput("treemap")
-)
-
-
-server <- function(input, output, session) {
-  
-  output$bars <- renderPlotly({
-    inv <- investor%>%
-      filter(funded_Year %in% input$year)
-    inv <- aggregate(as.numeric(inv$raised_amount_usd), by = list(category = inv$category),
-                    FUN = sum, na.rm = TRUE)
-    names(inv)[2] <- "raised_total"
-
-    hi <- inv[order(inv$raised_total, decreasing = TRUE), ]
-
-    hi<- hi %>%
-      mutate(category = fct_reorder(category, raised_total))
-    
-    hi <- head(hi, 20)
-    hi%>%
-    plot_ly(source = "bar_plot",
-            hoverlabel  = list(bgcolor = "yellow",
-                               font = list(color = "red")),
-            type = "bar")%>%
-      add_bars(y = ~category, x = ~raised_total, color = ~category, hoverinfo = "x+y")
-    #   inv <- investor %>%
-    #   filter(funded_Year %in% input$year)
-    #   inv <- aggregate(inv$raised_amount_usd, by = list(category = inv$category), FUN = sum, na.rm = TRUE)
-    #  hi_inv <-  inv[order(inv$raised_amount_usd, descreasing = TRUE),]
-    # 
-    # hi %>%
-    #   mutate(category = fct_reorder(category, raised_amount_usd))
-    # 
-    # hi <- head(hi, 20)
-    # hi%>%
-    # plot_ly(source = "bar_plot",
-    #         hoverlabel  = list(bgcolor = "blue",
-    #                            font = list(color = "black")))%>%
-    #   add_bars(x = category, y = raised_amount_usd, fill = category, hoverinfo = "x+y")
-    # 
-    # 
-    # 
-    #   ggplot(data_2[1:20,], aes(x = investor_name, y = funding_median_usd, fill = investor_name)) + 
-    #       geom_text(aes(y = funding_median_usd, 
-    #                     label = paste0("$", funding_median_usd), hjust=0), size = 3) +
-    #       geom_bar(stat = "identity")+
-    #       coord_flip()+
-    #       labs(x = "Roles", y = "Compensation (US Dollars)")+
-    #       ggtitle(paste("Factoring YOE + Location: Pay for roles"))+
-    #       theme(legend.title = element_blank(), legend.position = "none")  
-    })
-  
-
-}
-
-shinyApp(ui, server)
-
-
-
-
+investor <- investor[!is.na(investor$raised_amount_usd), ]
+operating_investor <- investor %>% filter(status == "operating")
+operating_investor
 ```
 
 ## Investors (Treemap)
@@ -290,19 +130,19 @@ shinyApp(ui, server)
 ```{r}
 '
 hi <- investor %>%
-  filter(funded_Year == 2007)
-hi <- aggregate(as.numeric(hi$funding_total_usd),
-         by=list(category=hi$category),
+  filter(funded_Year == 2007) 
+hi <- aggregate(as.numeric(hi$funding_total_usd), 
+         by=list(category=hi$category), 
                 FUN=sum, na.rm=TRUE)
 hi
-names(hi)[2] <- "funding_median_usd"
+names(hi)[2] <- "funding_median_usd" 
 hi <- hi[order(hi$funding_median_usd, decreasing = TRUE),]
 hi
 hi <- hi[1:20,]
 hi %>%
     mutate(category = fct_reorder(category, funding_median_usd))%>%
-    ggplot(aes(x = category, y = funding_median_usd, fill = category)) +
-    geom_text(aes(y = funding_median_usd,
+    ggplot(aes(x = category, y = funding_median_usd, fill = category)) + 
+    geom_text(aes(y = funding_median_usd, 
                   label = paste0("$", funding_median_usd), hjust=0), size = 3) +
     geom_bar(stat = "identity")+
     coord_flip()+
@@ -317,69 +157,6 @@ hi <- investor %>%
    summarise(num_companies=n_distinct(name))
 hi
 '
-```
-
-## Plotly_shiny
-
-```{r}
-con_status <- factor(c('operating', 'acquired', 'ipo'))
-
-ui <- fluidPage(
-  titlePanel('Highest Funding Median per Industry'),
-  sliderInput("year", "Year",
-                  min = 2013,
-                  max = range(as.numeric(investor$funded_Year))[2],
-                  value = 2013,
-                  sep = "",
-                  step = 1,
-                  animate = animationOptions(interval = 300)),
-  selectizeInput(
-    inputId = "status",
-    label = "Select a status",
-    choices = unique(con_status),
-    selected = 'operating',
-    multiple = TRUE
-  ),
-  plotlyOutput("bars")
-  # verbatimTextOutput("click")
-)
-
-
-server <- function(input, output, session) {
-  
-  output$bars <- renderPlotly({
-      data <- operating_investor %>%
-      filter(funded_Year %in% input$year)%>%
-      filter(status %in% input$status)
-     
-      data <- aggregate(as.numeric(data$funding_total_usd), 
-           by=list(category=data$category), FUN=median, na.rm=TRUE)
-      names(data)[2] <- "funding_median_usd" 
-      
-      hi <- data[order(data$funding_median_usd, decreasing = TRUE),]
-      data <- data[1:20,]
-      data_2 <- data %>%
-          mutate(category = fct_reorder(category, funding_median_usd))
-      ggplot(data_2, aes(x = category, y = funding_median_usd, fill = category, customdata = category)) + 
-          geom_text(aes(y = funding_median_usd, 
-                        label = paste0("$", funding_median_usd), hjust=0), size = 3) +
-          geom_bar(stat = "identity")+
-          coord_flip()+
-          labs(x = "Roles", y = "Compensation (US Dollars)")+
-          ggtitle(paste("Factoring YOE + Location: Pay for roles"))+
-          theme(legend.title = element_blank(), legend.position = "none")  })
-  
-  # output$click <- renderPrint({
-  #   d <- event_data("plotly_click")
-  #   if (is.null(d)) return("Click a bar")
-  #   data_2 %>%
-  #     filter(category %in% d$customdata)
-  # })
-  
-}
-
-shinyApp(ui, server)
-
 ```
 
 ```{r}
@@ -514,26 +291,26 @@ server <- function(input, output) {
       )
   })
   
-  # output$invest_category_money <- renderHighchart ({ 
-  #   data <- investor %>%
-  #     filter(funded_Year %in% input$year) %>%
-  #     filter(status  %in% input$status) %>%
-  #     filter(category  %in% input$category)
-  #   
-  #   data <- aggregate(as.numeric(data$funding_total_usd), 
-  #        by=list(category=data$category), FUN=median, na.rm=TRUE)
-  #   names(data)[2] <- "funding_median_usd" 
-  #   data %>%
-  #     hchart(
-  #       "treemap", 
-  #       hcaes(x = investor_name, funding_median_usd, color = funding_median_usd)
-  #     )
-  # })
+  output$invest_category_money <- renderHighchart ({ 
+    data <- investor %>%
+      filter(funded_Year %in% input$year) %>%
+      filter(status  %in% input$status) %>%
+      filter(category  %in% input$category)
+    
+    data <- aggregate(as.numeric(data$funding_total_usd), 
+         by=list(category=data$category), FUN=median, na.rm=TRUE)
+    names(data)[2] <- "funding_median_usd" 
+    data %>%
+      hchart(
+        "treemap", 
+        hcaes(x = investor_name, funding_median_usd, color = funding_median_usd)
+      )
+  })
 }
 shinyApp(ui, server)
 ```
 
-``` {.{.{.{'}}}}
+``` {.{.{.{.{.{.{.{.{'}}}}}}}}}
 {r, warning=FALSE, echo=FALSE}
 con <- factor(unique(levels_df[c("title")])$title)
 con2 <- factor(unique(levels_df[c("state")])$state)
