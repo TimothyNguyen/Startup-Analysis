@@ -1,0 +1,202 @@
+---
+title: "Victoria Shen"
+author: "Timothy Nguyen"
+date: "5/6/2021"
+output: html_notebook
+---
+
+## Imports
+
+```{r}
+library(ggplot2) 
+library(shiny)
+library(plotly)
+library(tidyr)
+library(dplyr)
+library(countrycode)
+library(readr)
+library(tidyverse)
+library(highcharter) 
+library(shinyWidgets)
+Sys.setenv("MAPBOX_TOKEN" = "pk.eyJ1IjoidGltb3RoeW5ndXllIiwiYSI6ImNrbW8wZmR0OTF6cnoycHQ0ZXFydTBwY3oifQ.LumCjldRn9X9jX70p1BA-w")
+```
+
+## Data Cleaning
+
+```{r}
+df_com <- read.csv("./crunchbase-data/companies.csv")
+df_acq <- read.csv("./crunchbase-data/acquisitions.csv")
+drop <- c("permalink", "homepage_url")
+
+acq <- df_acq%>%
+  select(name = company_name, price_amount)
+
+companies <- df_com[, !(names(df_com) %in% drop)]
+companies$first_funding_year <- format(as.Date(companies$first_funding_at), "%Y")
+companies$last_funding_year <-
+  format(as.Date(companies$last_funding_at), "%Y") 
+
+companies <- companies%>%
+  select(-c(first_funding_at, last_funding_at))%>%
+  separate(category_list, c("cat_a", "cat_b", "cat_c", "cat_d", "cat_e", "cat_f", "cat_g", "cat_h", "cat_i", "cat_j", "cat_k", "cat_l", "cat_m"), sep = "\\|", extra = "merge", fill = "right")%>%
+  pivot_longer(cols = starts_with("cat_a"),
+               names_to = "cate",
+               values_to = "category",
+               values_drop_na = TRUE)%>%
+  select(-c("cate"))
+companies<- companies %>% select(-contains("cat_"))
+
+
+#companies
+
+df_companies_acq <- companies%>%
+  filter(status == "acquired")
+
+# Companies (acquired status) with price_amount
+companies_acq <- left_join(df_companies_acq, acq, by = c("name"))
+
+
+
+df_inv <- read.csv("./crunchbase-data/investments.csv")
+df_inv_fund <- df_inv%>%
+  select(name = company_name, investor_name, funding_round_type, funding_round_code, funded_at, raised_amount_usd)
+
+df_inv2<- df_inv_fund%>%
+  select(-c("funding_round_type", "funding_round_code"))%>%
+  separate("funded_at", c("funded_Year", "Month", "Day"), sep = "-")%>%
+  select(-c("Month", "Day"))%>%
+  group_by(name, investor_name, funded_Year)%>%
+  summarise(raised_amount_usd = sum(raised_amount_usd))
+
+
+# Investment
+investor <- left_join(df_inv2, companies, by = "name")
+```
+
+```{r}
+investor
+'
+library(plyr)
+library(RJSONIO)
+con <- file("us-zip-code-latitude-and-longitude.json", "r")
+df_us  <- ldply(fromJSON(con), data.frame)
+close(con)
+write.csv(df_us,"./us-code-lat-long.csv")
+'
+```
+
+```{r}
+df_us <- read.csv("./us-code-lat-long.csv")
+df_us
+#df_uslocation<−gsub("","",paste(dfusfields.city, ", ", df_us$fields.state))
+df_us$location <- paste(df_us$fields.city, df_us$fields.state, sep=", ")
+df_us <- df_us %>% select(location, fields.zip, fields.latitude, fields.longitude )
+#df_us <- unique(df_us[c("fields.city", "fields.state")])
+df_us <- df_us %>% distinct(location, .keep_all = TRUE) 
+#df_us
+names(df_us)[names(df_us) == "fields.zip"] <- "zip"
+names(df_us)[names(df_us) == "fields.latitude"] <- "lat"
+names(df_us)[names(df_us) == "fields.longitude"] <- "long"
+df_us
+```
+
+```{r}
+us_companies <- companies %>% 
+  filter(as.numeric(last_funding_year) >= 2013) %>%
+  filter(country_code == 'USA') %>%
+  filter(funding_total_usd != '-') %>%
+  filter(funding_total_usd != '') %>%
+  filter(category != '') %>%
+  filter(status != '') %>%
+  filter(city != '') %>%
+  filter(state_code != '')
+us_companies$location = paste(us_companies$city, ", ", us_companies$state_code,
+                              sep = "")
+us_companies <- left_join(
+          us_companies,
+          df_us,
+          by=c("location"))
+```
+
+```{r}
+for(i in 1:nrow(us_companies)) {
+  us_companies[i,'lat'] <- us_companies[i,'lat'] + runif(1, -0.15, 0.15)
+  us_companies[i,'long'] <- us_companies[i,'long'] + runif(1, -0.15, 0.15)
+}
+```
+
+```{r}
+us_companies
+```
+
+```{r}
+'
+aggregate(list(us_companies$funding_total_usd),
+              by=list(location=us_companies$location,
+                      category=us_companies$category,
+                      status=us_companies$status), 
+                      FUN=mean)
+'
+us_companies %>%
+  group_by(location, category, funding_rounds, status, lat, long) %>%
+  select(funding_total_usd) %>% 
+  summarise(median = median(as.numeric(funding_total_usd)), n = n())
+
+```
+
+```{r, echo=FALSE, out.width="100%"}
+
+con_status <- factor(c('operating', 'acquired', 'ipo'))
+ui <-
+  fluidPage(
+    # App title
+    titlePanel("Companies"),
+    
+    # sidebar layout with input and output definitions
+    sidebarLayout(
+      # Sidebar panel for inputs
+      sidebarPanel(
+        radioButtons("status",
+                     "Choose status", 
+                     choices = con_status),
+      ),
+      
+      
+      
+      # Main panel for displaying outputs
+      mainPanel(
+        plotlyOutput(outputId = "companies")
+      )
+    ))
+server <- function(input, output) {
+  output$companies <-
+    renderPlotly({
+      prep <- us_companies %>% 
+        filter(status %in% input$status)
+      
+      prep <- prep %>%
+        group_by(location, category, status, lat, long, state_code) %>%
+        select(funding_total_usd) %>% 
+        summarise(x = median(as.numeric(funding_total_usd)), n = n())
+      
+      
+      fig <- prep
+      fig %>%
+        plot_mapbox() %>%
+        add_markers(x = ~long,
+                    y = ~lat,
+                    color = ~category,
+                    size = ~x * n,
+                   text = ~paste0(location, "<br>",
+                   "<b>Median salary:</b> $", round(x, 2), "<br>",
+                   "<b>Number of companies:</b> ", round(n, 2), "<br>",
+                   "<b>Category:</b> ", category, "<br>")) %>%
+        layout(
+          mapbox = list(
+            style = 'dark',
+            center = list(lon = -97, lat = 38),
+            zoom = 2.5)) 
+          })
+}
+shinyApp(ui, server)
+```

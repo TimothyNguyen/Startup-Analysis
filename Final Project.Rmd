@@ -116,30 +116,47 @@ companies_acq
 investor
 ```
 
-## Investors (Treemap)
-
 ```{r}
-#investor %>%
-#  filter(category == "Billing")
+investor <- investor %>%
+  filter(as.numeric(last_funding_year) >= 2013)
+
+investor <- investor[!is.na(investor$raised_amount_usd), ]
+operating_investor <- investor %>% filter(status == "operating")
+operating_investor
 ```
+
+## Investors (Treemap)
 
 ```{r}
 '
 hi <- investor %>%
   filter(funded_Year == 2007) 
-  aggregate(as.numeric(hi$funding_total_usd), 
+hi <- aggregate(as.numeric(hi$funding_total_usd), 
          by=list(category=hi$category), 
                 FUN=sum, na.rm=TRUE)
 hi
+names(hi)[2] <- "funding_median_usd" 
+hi <- hi[order(hi$funding_median_usd, decreasing = TRUE),]
+hi
+hi <- hi[1:20,]
+hi %>%
+    mutate(category = fct_reorder(category, funding_median_usd))%>%
+    ggplot(aes(x = category, y = funding_median_usd, fill = category)) + 
+    geom_text(aes(y = funding_median_usd, 
+                  label = paste0("$", funding_median_usd), hjust=0), size = 3) +
+    geom_bar(stat = "identity")+
+    coord_flip()+
+    labs(x = "Roles", y = "Compensation (US Dollars)")+
+    ggtitle(paste("Factoring YOE + Location: Pay for roles"))+
+    theme(legend.title = element_blank(), legend.position = "none")
 '
-
-
-
+'
 hi <- investor %>%
   filter(funded_Year == 2007) %>%
    group_by(investor_name) %>%
    summarise(num_companies=n_distinct(name))
 hi
+'
 ```
 
 ```{r}
@@ -155,22 +172,51 @@ ui <- fluidPage(
                          choices = levels(con_status),
                          selected = levels(con_status)),
       sliderInput("year", "Year",
-                  min = 2010,
+                  min = 2013,
                   max = range(as.numeric(investor$funded_Year))[2],
-                  value = 2010,
+                  value = 2013,
                   sep = "",
                   step = 1,
                   animate = animationOptions(interval = 300)
       )
     ),
     mainPanel(
-      highchartOutput("fund_median"),
+      #highchartOutput("fund_median"),
+      plotOutput(outputId = "fund_median")
     )
   )
 )
 
-#investor$
+server <- function(input, output) {
+  output$fund_median <- renderPlot({
+      
+      data <- operating_investor %>%
+        filter(funded_Year %in% input$year) %>%
+        filter(status  %in% input$status)
+     
+      data <- aggregate(as.numeric(data$funding_total_usd), 
+           by=list(category=data$category), FUN=median, na.rm=TRUE)
+      names(data)[2] <- "funding_median_usd" 
+      
+      hi <- data[order(data$funding_median_usd, decreasing = TRUE),]
+      data <- data[1:20,]
+      data %>%
+          mutate(category = fct_reorder(category, funding_median_usd))%>%
+          ggplot(aes(x = category, y = funding_median_usd, fill = category)) + 
+          geom_text(aes(y = funding_median_usd, 
+                        label = paste0("$", funding_median_usd), hjust=0), size = 3) +
+          geom_bar(stat = "identity")+
+          coord_flip()+
+          labs(x = "Roles", y = "Compensation (US Dollars)")+
+          ggtitle(paste("Factoring YOE + Location: Pay for roles"))+
+          theme(legend.title = element_blank(), legend.position = "none")
+        
+    })  
+      
+}
   
+
+'
 server <- function(input, output) {
   
   output$fund_median <- renderHighchart ({ 
@@ -187,6 +233,7 @@ server <- function(input, output) {
       )
   })
 }
+'
 shinyApp(ui, server)
 ```
 
@@ -209,7 +256,7 @@ ui <- fluidPage(
             choices = unique(levels(con_category)),
             options = list('action-box' = TRUE),
             multiple=TRUE,
-            selected=con_category[0]
+            selected=con_category[1]
         ),
       sliderInput("year", "Year",
                   min = 2010,
@@ -222,7 +269,7 @@ ui <- fluidPage(
     ),
     mainPanel(
       highchartOutput("invest_category"),
-      highchartOutput("invest_category_money"),
+      #highchartOutput("invest_category_money"),
     )
   )
 )
@@ -233,7 +280,7 @@ server <- function(input, output) {
   output$invest_category <- renderHighchart ({ 
     data <- investor %>%
       filter(funded_Year %in% input$year) %>%
-      filter(status  %in% input$status) %>%
+      filter(status  %in% input$status)# %>%
       filter(category  %in% input$category) %>%
       group_by(investor_name) %>%
       summarise(num_companies=n_distinct(name))
@@ -263,7 +310,7 @@ server <- function(input, output) {
 shinyApp(ui, server)
 ```
 
-```{'}
+``` {.{.{.{.{'}}}}}
 {r, warning=FALSE, echo=FALSE}
 con <- factor(unique(levels_df[c("title")])$title)
 con2 <- factor(unique(levels_df[c("state")])$state)
