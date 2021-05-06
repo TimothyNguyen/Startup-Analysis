@@ -219,9 +219,7 @@ ui <-
         sliderInput("round", "Rounds",
                   min = 0,
                   max = range(as.numeric(us_companies$funding_rounds))[2],
-                  value = 1,
-                  sep = "",
-                  step = 1,
+                  value = c(1,8),
                   animate = animationOptions(interval = 300))
       ),
       
@@ -237,7 +235,8 @@ server <- function(input, output) {
     renderPlotly({
       prep <- us_companies %>% 
         filter(status %in% input$status) %>%
-        filter(funding_rounds == input$round)
+        filter(funding_rounds >= input$round[1]) %>%
+        filter(funding_rounds <= input$round[2])
       
       prep <- prep %>%
         group_by(location, category, status, lat, long, state_code, funding_rounds) %>%
