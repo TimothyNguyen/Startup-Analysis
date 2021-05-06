@@ -1,13 +1,30 @@
 ---
-title: "Victoria Shen"
-author: "Timothy Nguyen"
+title: "What external factors are there in building a successful startup?"
+author: "Timothy Nguyen & Jacob Yang"
 date: "5/6/2021"
-output: html_notebook
+runtime: shiny
+output: 
+  ioslides_presentation: 
+    css: temp.css
 ---
 
-## Imports
+## Why is it important?
 
-```{r}
+-   If you're looking to build a startup, understanding where to begin your startup may be important based off the industry you're in.
+-   Successful can mean many things. It can mean being operated and become a series C or higher startup. Maybe you want to build a company that IPO or accquired. Are there specific industries or locations where you can find your success?
+-   What investors could be important to your business?
+
+## Notes:
+
+-   We've filtered our data to look at USA locations
+-   We're only looking at data from companies who have had their last funding round between 2013 and 2015.
+-   Reason: Investor patterns change quite rapidly and what made a company successful five years ago doesn't neccesarily mean much for your success now (if we were living in 2015/2016)
+
+## Datasets
+
+`{#{r, echo=FALSE, warning=FALSE, message=FALSE, out.width="100%"} #knitr::include_graphics("combined_tables.png")`
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
 library(ggplot2) 
 library(shiny)
 library(plotly)
@@ -21,9 +38,9 @@ library(shinyWidgets)
 Sys.setenv("MAPBOX_TOKEN" = "pk.eyJ1IjoidGltb3RoeW5ndXllIiwiYSI6ImNrbW8wZmR0OTF6cnoycHQ0ZXFydTBwY3oifQ.LumCjldRn9X9jX70p1BA-w")
 ```
 
-## Data Cleaning
+## Where do startups occur most often in the USA? What industries typically would you have in these populated areas?
 
-```{r}
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
 df_com <- read.csv("./crunchbase-data/companies.csv")
 df_acq <- read.csv("./crunchbase-data/acquisitions.csv")
 drop <- c("permalink", "homepage_url")
@@ -71,36 +88,17 @@ df_inv2<- df_inv_fund%>%
 
 # Investment
 investor <- left_join(df_inv2, companies, by = "name")
-```
 
-```{r}
-investor
-'
-library(plyr)
-library(RJSONIO)
-con <- file("us-zip-code-latitude-and-longitude.json", "r")
-df_us  <- ldply(fromJSON(con), data.frame)
-close(con)
-write.csv(df_us,"./us-code-lat-long.csv")
-'
-```
-
-```{r}
+# Clean location data
 df_us <- read.csv("./us-code-lat-long.csv")
-df_us
-#df_uslocation<−gsub("","",paste(dfusfields.city, ", ", df_us$fields.state))
 df_us$location <- paste(df_us$fields.city, df_us$fields.state, sep=", ")
 df_us <- df_us %>% select(location, fields.zip, fields.latitude, fields.longitude )
-#df_us <- unique(df_us[c("fields.city", "fields.state")])
 df_us <- df_us %>% distinct(location, .keep_all = TRUE) 
-#df_us
 names(df_us)[names(df_us) == "fields.zip"] <- "zip"
 names(df_us)[names(df_us) == "fields.latitude"] <- "lat"
 names(df_us)[names(df_us) == "fields.longitude"] <- "long"
-df_us
-```
 
-```{r}
+# Group the two datasets together
 us_companies <- companies %>% 
   filter(as.numeric(last_funding_year) >= 2013) %>%
   filter(country_code == 'USA') %>%
@@ -116,95 +114,6 @@ us_companies <- left_join(
           us_companies,
           df_us,
           by=c("location"))
-```
-
-```{r}
-'
-for(i in 1:nrow(us_companies)) {
-  us_companies[i,'lat'] <- us_companies[i,'lat'] + runif(1, -0.15, 0.15)
-  us_companies[i,'long'] <- us_companies[i,'long'] + runif(1, -0.15, 0.15)
-}
-'
-```
-
-```{r}
-us_companies
-```
-
-```{r}
-'
-aggregate(list(us_companies$funding_total_usd),
-              by=list(location=us_companies$location,
-                      category=us_companies$category,
-                      status=us_companies$status), 
-                      FUN=mean)
-'
-us_companies %>%
-  group_by(location, category, status, lat, long, state_code) %>%
-        select(funding_total_usd, funding_rounds) %>% 
-        summarise(x = median(as.numeric(funding_total_usd)), 
-                  median_funding_rounds = median(as.numeric(funding_rounds)),
-                  n = n())
-
-```
-
-``` {.{'}}
-{r, echo=FALSE, out.width="100%"}
-
-con_status <- factor(c('operating', 'acquired', 'ipo'))
-ui <-
-  fluidPage(
-    # App title
-    titlePanel("Companies"),
-    
-    # sidebar layout with input and output definitions
-    sidebarLayout(
-      # Sidebar panel for inputs
-      sidebarPanel(
-        radioButtons("status",
-                     "Choose status", 
-                     choices = con_status),
-      ),
-      
-      
-      
-      # Main panel for displaying outputs
-      mainPanel(
-        plotlyOutput(outputId = "companies")
-      )
-    ))
-server <- function(input, output) {
-  output$companies <-
-    renderPlotly({
-      prep <- us_companies %>% 
-        filter(status %in% input$status)
-      
-      prep <- prep %>%
-        group_by(location, category, status, lat, long, state_code) %>%
-        select(funding_total_usd) %>% 
-        summarise(x = median(as.numeric(funding_total_usd)), n = n())
-      
-      
-      fig <- prep
-      fig %>%
-        plot_mapbox() %>%
-        add_markers(x = ~long,
-                    y = ~lat,
-                    color = ~category,
-                    size = ~x * n,
-                   text = ~paste0(location, "<br>",
-                   "<b>Median salary:</b> $", round(x, 2), "<br>",
-                   "<b>Number of companies:</b> ", round(n, 2), "<br>",
-                   "<b>Category:</b> ", category, "<br>")) %>%
-        layout(
-          mapbox = list(
-            style = 'dark',
-            center = list(lon = -97, lat = 38),
-            zoom = 2.5)) 
-          })
-}
-shinyApp(ui, server)
-'
 ```
 
 ```{r, echo=FALSE, out.width="100%"}
@@ -277,58 +186,5 @@ server <- function(input, output) {
             zoom = 2.5)) 
           })
 }
-shinyApp(ui, server)
-```
-
-```{r}
-con_status <- factor(c('operating', 'acquired', 'ipo'))
-investor$investor_name<- as.factor(investor$investor_name)
-investor <- investor%>%
-  ungroup()%>%
-  filter(country_code == "USA")%>%
-  select(investor_name, category, funded_Year, raised_amount_usd)
-
-investor$category <- as.factor(investor$category)
-
-ui <- fluidPage(
-  titlePanel('Highest Funding Median per Industry'),
-  sliderInput("year", "Year",
-                  min = 2013,
-                  max = range(as.numeric(investor$funded_Year))[2],
-                  value = 2013,
-                  sep = "",
-                  step = 1,
-                  animate = animationOptions(interval = 300)),
-  selectizeInput(
-    inputId = "category",
-    label = "Select a category",
-    choices = unique(investor$category),
-    selected = '',
-    multiple = TRUE
-  ),
-  plotlyOutput("bars")
-)
-
-
-server <- function(input, output, session) {
-  
-  output$bars <- renderPlotly({
-      data <- investor %>%
-      filter(funded_Year %in% input$year)%>%
-      filter(category %in% input$category)
-      data_2 <- data %>%
-          mutate(investor_name = fct_reorder(investor_name, funding_median_usd))
-      ggplot(data_2[1:20,], aes(x = investor_name, y = funding_median_usd, fill = investor_name)) + 
-          geom_text(aes(y = funding_median_usd, 
-                        label = paste0("$", funding_median_usd), hjust=0), size = 3) +
-          geom_bar(stat = "identity")+
-          coord_flip()+
-          labs(x = "Roles", y = "Compensation (US Dollars)")+
-          ggtitle(paste("Factoring YOE + Location: Pay for roles"))+
-          theme(legend.title = element_blank(), legend.position = "none")  })
-  
-
-}
-
 shinyApp(ui, server)
 ```
