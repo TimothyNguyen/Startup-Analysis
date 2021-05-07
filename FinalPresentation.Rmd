@@ -210,6 +210,7 @@ ui <-
     sidebarLayout(
       # Sidebar panel for inputs
       sidebarPanel(
+        position = c("right"),
         radioButtons("status",
                      "Choose status", 
                      choices = con_status),
@@ -220,12 +221,11 @@ ui <-
                   animate = animationOptions(interval = 300))
       ),
       
-      
-      
       # Main panel for displaying outputs
       mainPanel(
         plotlyOutput(outputId = "companies")
-      )
+      ),
+      position="right"
     ))
 server <- function(input, output) {
   output$companies <-
@@ -262,6 +262,7 @@ server <- function(input, output) {
                    "<b>Category:</b> ", category, "<br>",
                    "<b>Average Funding Rounds:</b> ", mean_funding_rounds, "<br>")) %>%
         layout(
+          width = 1000, height = 1000,
           legend = list(orientation = "h", x = 0.5),
           mapbox = list(
             style = 'dark',
