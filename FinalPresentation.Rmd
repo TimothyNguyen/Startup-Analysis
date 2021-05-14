@@ -262,7 +262,7 @@ server <- function(input, output) {
                    "<b>Category:</b> ", category, "<br>",
                    "<b>Average Funding Rounds:</b> ", mean_funding_rounds, "<br>")) %>%
         layout(
-          width = 1000, height = 1000,
+          width = 700, height = 700,
           legend = list(orientation = "h", x = 0.5),
           mapbox = list(
             style = 'dark',
